@@ -1,3 +1,7 @@
+*
+!*.*
+!*/
+*.nim.kate-swp
 nimcache/
 nimblecache/
 htmldocs/
