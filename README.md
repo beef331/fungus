@@ -24,7 +24,7 @@ type
       discard
 ```
 
-This is a bit messy due to rightly not being able to share field names.
+This is a bit messy due to rightly not being able to share field names(Nim variants are great for specific things, for other things they are a bit in the way).
 Other languages get around it doing something similar to what this library does, statically enforcing unpacking each kind.
 What one writes with fungus instead is:
 ```nim
