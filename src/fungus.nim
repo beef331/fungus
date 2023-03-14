@@ -174,7 +174,7 @@ macro adtEnum*(origName, body: untyped): untyped =
       of nnkExprColonExpr:
         objDef.addGeneric identDef(NimName param[0], param[1])
       of nnkIdent:
-        objDef.addGeneric identDef(NimName param, newEmptyNode())
+        objDef.addGeneric identDef(NimName param, ident"auto")
       else:
         error("Unexpected generic constraint", param)
 

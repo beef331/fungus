@@ -1,5 +1,5 @@
 import fungus
-adtEnum(LinkedList[T: auto]): # Need the generic constraint for some reason???
+adtEnum(LinkedList[T]):
   Nil
   Node: tuple[n: ref LinkedList[T], val: T]
 
@@ -40,4 +40,4 @@ var myList2 = LinkedList[string] newNode("world")
 myList2 = myList2.prepend "cruel"
 myList2 = myList2.prepend "hello"
 echo myList2
-echo myList.len
+echo myList2.len

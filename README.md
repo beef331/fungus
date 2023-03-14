@@ -106,11 +106,11 @@ Finally there is a `tuple` match which is `(x, y, z, w)`, much like the other ma
 Tuple unpacking works just like normally for this matching, although one can match as few positional fields as they want.
 
 ### Generics?!
-Yes this also supports some subset of generics with the caveat that the parameters need to be `T: auto` if there is no constraint.
+Yes this also supports some subset of generics.
 
 ```nim
 import fungus
-adtEnum(LinkedList[T: auto]): # Need the generic constraint for some reason???
+adtEnum(LinkedList[T]):
   Nil
   Node: tuple[n: ref LinkedList[T], val: T]
 
@@ -151,7 +151,7 @@ var myList2 = LinkedList[string] newNode("world")
 myList2 = myList2.prepend "cruel"
 myList2 = myList2.prepend "hello"
 echo myList2
-echo myList.len
+echo myList2.len
 ```
 
 The above *just works*(thanks to the Rust book for a small example of linked lists using an ADT).
