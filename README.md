@@ -37,6 +37,32 @@ adtEnum(Shape):
 ```
 
 This generates a static type per each branch, and also a bunch of accessor procedures.
+The type definitions look like:
+
+```nim
+type
+  ShapeKind = enum
+    NoneKind, CircleKind, RectangleKind, LineKind
+  Shape = object
+    case kind: ShapeKind
+    of LineKind:
+      LineData:
+        tuple[x1, y1, x2, y2: int]
+    of RectangleKind:
+      RectangleData:
+        tuple[x, y, w, h: int]
+    of CircleKind:
+      CircleData:
+        tuple[x, y, r: int]
+    of NoneKind:
+      nil
+
+  None = distinct Shape
+  Circle = distinct Shape
+  Rectangle = distinct Shape
+  Line = distinct Shape
+```
+
 Which means the following is possible:
 ```nim
 var a = Shape Circle.init(10, 10, 100)
