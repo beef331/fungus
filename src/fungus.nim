@@ -185,7 +185,7 @@ macro adtEnum*(origName, body: untyped): untyped =
               proc `field=`*(val: var typ, newVal: fieldTyp) = instTyp(val).dataName.field = newVal
 
       let
-        initProc = routineNode("init")
+        initProc = routineNode(NimName postfix(ident "init", "*"))
         tupleConstr = nnkTupleConstr.newTree()
       initProc.addParam identDef(NimName ident"_", makeTypeDesc typ)
       initProc.returnType = typ
