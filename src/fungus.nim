@@ -208,7 +208,7 @@ macro adtEnum*(origName, body: untyped): untyped =
   result = newStmtList(NimNode enumDef(NimName enumName, enumFields))
   NimNode(caseDef)[0] = NimNode identDef(NimName NimNode(caseDef)[0], NimNode enumName)
   let
-    objDef = objectDef(NimName name)
+    objDef = objectDef(NimName postFix(name, "*"))
     recCase = nnkRecCase.newTree()
   NimNode(caseDef).copyChildrenTo(recCase)
   objDef.recList = nnkRecList.newTree recCase
