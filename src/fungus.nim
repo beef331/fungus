@@ -61,10 +61,12 @@ proc `$`*[T: AdtChild](adtChild: T): string =
 
 
 proc adtEqual*[T: AdtBase](a, b: T): bool =
+  ## Base implementation for implementing automatic `==` operators
   adtEqImpl(a, b)
 
 proc adtEqual*[T: AdtChild](a, b: T): bool =
-  distinctBase(a) == distinctBase(b)
+  ## Base implementation for implementing automatic `==` operators
+  adtEqual(distinctBase(a), distinctBase(b))
 
 type FungusConvDefect = object of Defect
 

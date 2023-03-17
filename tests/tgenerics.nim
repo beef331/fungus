@@ -1,4 +1,6 @@
 import fungus
+import std/unittest
+
 adtEnum(LinkedList[T]):
   Nil
   Node: tuple[n: ref LinkedList[T], val: T]
@@ -37,14 +39,14 @@ var myList = LinkedList[int] newNode(10)
 myList = myList.prepend(11)
 myList = myList.prepend(12)
 myList = myList.prepend(13)
-echo myList
-echo myList.len
+check $myList == "[13, 12, 11, 10]"
+check myList.len == 4
 
 var myList2 = LinkedList[string] newNode("world")
 myList2 = myList2.prepend "cruel"
 myList2 = myList2.prepend "hello"
-echo myList2
-echo myList2.len
-echo Nil[int].init()
 
-echo LinkedList[int](Nil[int].init()) == LinkedList[int](Nil[int].init())
+check $myList2 == "[hello, cruel, world]"
+check myList2.len == 3
+
+check adtEqual(Nil[int].init(), (Nil[int].init()))
