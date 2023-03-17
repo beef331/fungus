@@ -82,7 +82,7 @@ macro adtEnum*(origName, body: untyped): untyped =
       else:
         origName
 
-    caseDef = caseStmt(NimName ident"kind")
+    caseDef = caseStmt(NimName postfix(ident"kind", "*"))
     genericParams =
       if origName.kind == nnkBracketExpr:
         origName[1..^1]
