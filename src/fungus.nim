@@ -228,7 +228,7 @@ macro adtEnum*(origName, body: untyped): untyped =
   for i, typeName in typeNames:
     let def =
       genast(instantiatedType, typeName, field = enumFields[i]):
-        type typeName = distinct instantiatedType
+        type typeName* = distinct instantiatedType
     def[0][1] = objDef.genericParamList()
     result[0].add def[0]
 
