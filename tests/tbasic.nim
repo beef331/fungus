@@ -26,3 +26,7 @@ of Line as (mut x1, _, x2, _):
   inc x1
   echo a.to(Line)
 else: discard
+
+
+if (myVar: Line) from a:
+  echo myVar

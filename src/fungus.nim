@@ -341,10 +341,10 @@ macro `from`*(matcher, val: untyped): untyped =
     result =
       genast(name, T, val, typKind = ident($T & "Kind")):
         val.kind == typKind and
-        (let name {.byaddr.} = kindOf(T, val)(val); true)
+        (var name {.byaddr.} = kindOf(T, val)(val); true)
   else:
     result =
       genast(name, T, val, typKind = ident($T & "Kind")):
         val.kind == typKind and
-        (var name {.byaddr.} = kindOf(T, val)(val); true)
+        (let name = kindOf(T, val)(val); true)
 
