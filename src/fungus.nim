@@ -1,4 +1,4 @@
-import std/[macros, genasts, strutils, macrocache, decls, sets, typetraits]
+import std/[macros, genasts, strutils, macrocache, decls, sets, typetraits, strformat]
 import pkg/micros
 
 
@@ -249,13 +249,13 @@ proc getKindAndDataName(data, toLookFor: NimNode): (NimNode, NimNode) =
   for i, name in data[2]:
     if name.eqIdent(toLookFor):
       return (data[1][i], data[3][i])
-  error("Invalid `kind`.", toLookFor)
+  error(fmt"Invalid kind '{toLookFor.repr}'." , toLookFor)
 
 
 macro match*(val: ADTBase, branches: varargs[untyped]): untyped =
   result = nnkIfStmt.newTree()
   let
-    adtData = adtTable[val.getTypeInst.signatureHash]
+    adtData = adtTable[val.getTypeInst.hashName]
     valIsNotMut = val.kind != nnkSym or val.symKind != nskVar
 
   var implemented: HashSet[string]
@@ -326,13 +326,13 @@ macro match*(val: ADTBase, branches: varargs[untyped]): untyped =
           error("Invalid alias statement", branch[0][^1])
         implemented.incl branch[0][1].repr
 
-      of nnkIdent: # Just a kind match
+      of nnkIdent, nnkSym: # Just a kind match
         let (kind, _)= getKindAndDataName(adtData, branch[0])
         result.add nnkElifBranch.newTree(
           infix(nnkDotExpr.newTree(val, ident"kind"), "==", kind),
           branch[^1])
         implemented.incl branch[0].repr
-      else: error("Invalid branch not dong a match.", branch)
+      else: error("Invalid branch not doing a match.", branch)
 
   if result[^1].kind != nnkElse:
     var unimplemented: HashSet[string]
