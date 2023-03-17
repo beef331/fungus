@@ -3,6 +3,10 @@ adtEnum(LinkedList[T]):
   Nil
   Node: tuple[n: ref LinkedList[T], val: T]
 
+proc `$`[T](nl: Nil[T]): string = "nil"
+
+proc `==`[T](a, b: LinkedList[T]): bool = adtEqual(a, b)
+
 proc newNode[T](val: T): Node[T] =
   result = Node[T].init((ref LinkedList[T])(), val)
   result.n[] = LinkedList[T] Nil[T].init()
@@ -41,3 +45,6 @@ myList2 = myList2.prepend "cruel"
 myList2 = myList2.prepend "hello"
 echo myList2
 echo myList2.len
+echo Nil[int].init()
+
+echo LinkedList[int](Nil[int].init()) == LinkedList[int](Nil[int].init())

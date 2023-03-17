@@ -7,7 +7,7 @@ adtEnum(Shape):
 
 var a = Shape Circle.init(10, 10, 100)
 a.to(Circle).r = 300
-echo a.to(Circle)
+echo $a.to(Circle)
 a = Shape Line.init(0, 0, 1, 1)
 
 if (var myVar: Line) from a:

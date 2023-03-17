@@ -157,4 +157,19 @@ echo myList2.len
 The above *just works*(thanks to the Rust book for a small example of linked lists using an ADT).
 
 
-In the present state all generated procedures are private and need to be manually exported.
+## Implementing custom `==`
+
+Fungus has a `adtEqual` procedure which can be used to invoke default comparisons for a type.
+This means kind is checked then the tuples are compared.
+An example for thel linked list looks like:
+```nim
+proc `==`[T](a, b: LinkedList[T]): bool = adtEqual(a, b)
+```
+
+## Implementing custom `$`
+
+Fungus has a `$` procedure defined as a generic, which means you can overload it for your own type.
+Otherwise it should call this one.
+```nim
+proc `$`[T](nl: Nil[T]): string = "nil"
+```

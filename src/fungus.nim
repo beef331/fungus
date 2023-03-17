@@ -1,4 +1,4 @@
-import std/[macros, genasts, strutils, macrocache, decls, sets]
+import std/[macros, genasts, strutils, macrocache, decls, sets, typetraits]
 import pkg/micros
 
 
@@ -13,8 +13,58 @@ proc hashName(n: NimNode): string =
 macro isAdt(t: typed): untyped =
   newLit(t.getTypeInst.hashName() in adtTable)
 
-type ADTBase* = concept t
-  isAdt(t)
+type
+  ADTBase* = concept t
+    isAdt(t)
+  AdtChild* = concept t
+    isAdt(distinctBase(t))
+    not isAdt(t)
+
+macro adtChildStrImpl(val: typed, base: typedesc): untyped =
+  let
+    typ = val.getTypeInst()
+    baseTyp = base.getTypeImpl[^1]
+    table = adtTable[baseTyp.hashName]
+
+  for i, x in table[2]:
+    if x.eqIdent(typ):
+      if table[3][i].kind == nnkEmpty:
+        result = newLit(typ.repr & "()")
+      else:
+        result = genast(typ, val, baseTyp, res = ident"result", fieldName = table[3][i]):
+          res = astToStr(typ)
+          res.add $val.baseTyp.fieldName
+
+macro adtEqImpl(a, b: typed): untyped =
+  let
+    typ = a.getTypeInst()
+    table = adtTable[typ.hashName]
+  result = newStmtList()
+  result.add:
+    genast(a, b):
+      if a.kind != b.kind:
+        return false
+  let caseStmt = caseStmt(NimName nnkDotExpr.newTree(a, ident"kind"))
+  for i, x in table[1]:
+    if table[3][i].kind == nnkEmpty:
+      caseStmt.add ofBranch(x, newLit(true))
+    else:
+      caseStmt.add:
+        ofBranch(x):
+          genast(a, b, fieldName = table[3][i]):
+            a.fieldName == b.fieldName
+  result.add NimNode caseStmt
+
+proc `$`*[T: AdtChild](adtChild: T): string =
+  ## `$` for ADT subtypes, generic to allow overloading specifically
+  adtChildStrImpl(adtChild, distinctBase(T))
+
+
+proc adtEqual*[T: AdtBase](a, b: T): bool =
+  adtEqImpl(a, b)
+
+proc adtEqual*[T: AdtChild](a, b: T): bool =
+  distinctBase(a) == distinctBase(b)
 
 type FungusConvDefect = object of Defect
 
@@ -75,15 +125,12 @@ macro adtEnum*(origName, body: untyped): untyped =
           res = ident"result"
         ):
 
-          proc to(val: name, _: typedesc[typ]): lent typ =
+          proc to*(val: name, _: typedesc[typ]): lent typ =
             if val.kind != enumName:
               raise (ref FungusConvDefect)(msg: "Cannot convert '$#' to '$#'." % [$val.kind, $enumName])
             typ name(val)
 
-          proc init(_: typedesc[typ]): typ = typ name(kind: enumName)
-
-          proc `$`(val: typ): string =
-            $typ & "()"
+          proc init*(_: typedesc[typ]): typ = typ name(kind: enumName)
 
     of nnkCall, nnkCommand:
       if entry.len != 2 or (entry[1].kind != nnkStmtList and entry[1][0].kind != nnkTupleTy):
@@ -115,31 +162,27 @@ macro adtEnum*(origName, body: untyped): untyped =
           res = ident"result",
           instTyp = instantiatedType
         ):
-          converter `to name`(arg: typ): instTyp = instTyp(arg)
-          converter `to name`(arg: var typ): var instTyp = instTyp(arg)
+          converter `to name`*(arg: typ): instTyp = instTyp(arg)
+          converter `to name`*(arg: var typ): var instTyp = instTyp(arg)
 
-          proc to(val: instTyp, _: typedesc[typ]): lent typ =
+          proc to*(val: instTyp, _: typedesc[typ]): lent typ =
             if val.kind != enumName:
               raise (ref FungusConvDefect)(msg: "Cannot convert '$#' to '$#'." % [$val.kind, $enumName])
             typ instTyp(val)
 
-          proc to(val: var instTyp, _: typedesc[typ]): var typ =
+          proc to*(val: var instTyp, _: typedesc[typ]): var typ =
             if val.kind != enumName:
               raise (ref FungusConvDefect)(msg: "Cannot convert '$#' to '$#'." % [$val.kind, $enumName])
             typ instTyp(val)
-
-          proc `$`(val: typ): string =
-            res = astToStr(typ)
-            res.add $instTyp(val).dataName
 
       for iDef in entry[1][0]:
         let fieldTyp = iDef[^2]
         for field in iDef[0..^3]:
           addons.add:
             genast(field, typ, fieldTyp, name, dataName, instTyp = instantiatedType):
-              proc field(val: typ): lent fieldTyp = instTyp(val).dataName.field
-              proc field(val: var typ): var fieldTyp = instTyp(val).dataName.field
-              proc `field=`(val: var typ, newVal: fieldTyp) = instTyp(val).dataName.field = newVal
+              proc field*(val: typ): lent fieldTyp = instTyp(val).dataName.field
+              proc field*(val: var typ): var fieldTyp = instTyp(val).dataName.field
+              proc `field=`*(val: var typ, newVal: fieldTyp) = instTyp(val).dataName.field = newVal
 
       let
         initProc = routineNode("init")
