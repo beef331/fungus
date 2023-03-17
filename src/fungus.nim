@@ -205,7 +205,7 @@ macro adtEnum*(origName, body: untyped): untyped =
       error("Invalid entry, expected either an 'name' or 'name: tuple[...]'.", entry)
 
   let enumName = ident $name & "Kind"
-  result = newStmtList(NimNode enumDef(NimName enumName, enumFields))
+  result = newStmtList(NimNode enumDef(NimName enumName, enumFields, true))
   NimNode(caseDef)[0] = NimNode identDef(NimName NimNode(caseDef)[0], NimNode enumName)
   let
     objDef = objectDef(NimName postFix(name, "*"))
