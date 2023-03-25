@@ -118,7 +118,7 @@ adtEnum(Data):
   Vector2: tuple[x, y: float32]
 ```
 
-Is valid code, there exists `toInternal` converts to implicitly convert, but some operations will require explicit invokation.
+Is valid code, there exists `toInternal` converts to implicitly convert, but some operations will require explicit invocation.
 For example:
 ```nim
 proc doThing(f: float) = discard
