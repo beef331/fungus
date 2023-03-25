@@ -33,7 +33,12 @@ macro adtChildStrImpl(val: typed, base: typedesc): untyped =
       else:
         result = genast(typ, val, baseTyp, res = ident"result", fieldName = table[3][i]):
           res = astToStr(typ)
+
+          when typeof(val.baseTyp.fieldName) isnot tuple:
+            res.add "("
           res.add $val.baseTyp.fieldName
+          when typeof(val.baseTyp.fieldName) isnot tuple:
+            res.add ")"
 
 macro adtEqImpl(a, b: typed): untyped =
   let
@@ -135,8 +140,8 @@ macro adtEnum*(origName, body: untyped): untyped =
           proc init*(_: typedesc[typ]): typ = typ name(kind: enumName)
 
     of nnkCall, nnkCommand:
-      if entry.len != 2 or (entry[1].kind != nnkStmtList and entry[1][0].kind != nnkTupleTy):
-        error("Invalid entry expected `name: tuple[...].")
+      if entry.len != 2:
+        error("Invalid entry expected `name: type`", entry)
       typeNames.add entry[0]
       let
         enumName = ident($entry[0] & "Kind")
@@ -177,28 +182,41 @@ macro adtEnum*(origName, body: untyped): untyped =
               raise (ref FungusConvDefect)(msg: "Cannot convert '$#' to '$#'." % [$val.kind, $enumName])
             typ instTyp(val)
 
-      for iDef in entry[1][0]:
-        let fieldTyp = iDef[^2]
-        for field in iDef[0..^3]:
-          addons.add:
-            genast(field, typ, fieldTyp, name, dataName, instTyp = instantiatedType):
-              proc field*(val: typ): lent fieldTyp = instTyp(val).dataName.field
-              proc field*(val: var typ): var fieldTyp = instTyp(val).dataName.field
-              proc `field=`*(val: var typ, newVal: fieldTyp) = instTyp(val).dataName.field = newVal
 
       let
         initProc = routineNode(NimName postfix(ident "init", "*"))
         tupleConstr = nnkTupleConstr.newTree()
       initProc.addParam identDef(NimName ident"_", makeTypeDesc typ)
       initProc.returnType = typ
-      for val in entry[1][0]:
-        for name in val[0..^3]:
-          initProc.addParam identDef(NimName name, val[^2])
-          tupleConstr.add name
+      if entry[1][0].kind == nnkTupleTy:
+        # Tuples emit field accessors
+        for iDef in entry[1][0]:
+          let fieldTyp = iDef[^2]
+          for field in iDef[0..^3]:
+            addons.add:
+              genast(field, typ, fieldTyp, name, dataName, instTyp = instantiatedType):
+                proc field*(val: typ): lent fieldTyp = instTyp(val).dataName.field
+                proc field*(val: var typ): var fieldTyp = instTyp(val).dataName.field
+                proc `field=`*(val: var typ, newVal: fieldTyp) = instTyp(val).dataName.field = newVal
 
-      initProc.addToBody:
-        genast(enumName, dataName, tupleConstr, typ, instTyp = instantiatedType):
-          typ instTyp(kind: enumName, dataName: tupleConstr)
+        for val in entry[1][0]:
+          for name in val[0..^3]:
+            initProc.addParam identDef(NimName name, val[^2])
+            tupleConstr.add name
+
+        initProc.addToBody:
+          genast(enumName, dataName, tupleConstr, typ, instTyp = instantiatedType):
+            typ instTyp(kind: enumName, dataName: tupleConstr)
+      else:
+        # Handle the case of `Arr: array[3, int]`s special code
+        initProc.addParam(identDef(NimName ident"param", entry[1]))
+        initProc.addToBody:
+          genast(enumName, dataName, tupleConstr, typ, instTyp = instantiatedType, paramName = ident"param"):
+            typ instTyp(kind: enumName, dataName: paramName)
+        addons.add:
+          genast(typ, dataName, realTyp = entry[1], instTyp = instantiatedType):
+            converter `toInternal`*(val: typ): realTyp = instTyp(val).dataName
+            converter `toInternal`*(val: var typ): var realTyp = instTyp(val).dataName
 
       addons[^1].add NimNode initProc
     else:
@@ -214,12 +232,13 @@ macro adtEnum*(origName, body: untyped): untyped =
   objDef.recList = nnkRecList.newTree recCase
 
   if origName.kind == nnkBracketExpr:
+    # We need to add generic parameters
     for param in origName[1..^1]:
       case param.kind
       of nnkExprColonExpr:
         objDef.addGeneric identDef(NimName param[0], param[1])
       of nnkIdent:
-        objDef.addGeneric identDef(NimName param, ident"auto")
+        objDef.addGeneric identDef(NimName param, ident"auto") # have to use `auto` here otherwise compiler errors
       else:
         error("Unexpected generic constraint", param)
 
@@ -306,14 +325,18 @@ macro match*(val: ADTBase, branches: varargs[untyped]): untyped =
                 error("Can only make a 'mut' reference to a mutable variable.", val)
 
               injection.insert 0:
-                genast(val, dataName, name = x[1], index = newLit(i), destType = branch[0][1], byAddr = bindSym"byaddr"):
+                genast(val, dataName, name = x[1], index = newLit(i), destType = branch[0][1], byAddr = bindSym"byaddr", expr = branch[0].repr):
+                  when val.dataName isnot tuple:
+                    {.error: "attempted to unpack a type that is not a tuple: '" & expr & "'.".}
                   var name {.byaddr.} = val.dataName[index]
 
 
             of nnkIdent:
               if not x.eqIdent"_":
                 injection.insert 0:
-                  genast(val, dataName, name = x, index = newLit(i), destType = branch[0][1]):
+                  genast(val, dataName, name = x, index = newLit(i), destType = branch[0][1], expr = branch[0].repr):
+                    when val.dataName isnot tuple:
+                      {.error: "attempted to unpack a type that is not a tuple: '" & expr & "'.".}
                     let name = val.dataName[index]
 
             else:
@@ -336,7 +359,7 @@ macro match*(val: ADTBase, branches: varargs[untyped]): untyped =
 
   if result[^1].kind != nnkElse:
     var unimplemented: HashSet[string]
-    for kind in adtData[^1]:
+    for kind in adtData[2]:
       let theRepr = kind.repr
       if theRepr notin implemented:
         unimplemented.incl theRepr

@@ -105,6 +105,32 @@ There is also the `as name` which is an immutable variable match.
 Finally there is a `tuple` match which is `(x, y, z, w)`, much like the other match `mut` can prefix a name to indicate it is a mutable match.
 Tuple unpacking works just like normally for this matching, although one can match as few positional fields as they want.
 
+### Non tuple types
+
+```nim
+import fungus
+adtEnum(Data):
+  None
+  String: string
+  Int: int
+  Float: float
+  Arr: array[3, int]
+  Vector2: tuple[x, y: float32]
+```
+
+Is valid code, there exists `toInternal` converts to implicitly convert, but some operations will require explicit invokation.
+For example:
+```nim
+proc doThing(f: float) = discard
+match a:
+of Vector2 as (x, y):
+  echo x, " ", y
+of Float as mut x:
+  x.toInternal += 0.3 # Need `.toInternal` for some cases
+  doThing(x)
+else: discard
+```
+
 ### Generics?!
 Yes this also supports some subset of generics.
 
