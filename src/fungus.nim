@@ -231,6 +231,9 @@ macro adtEnum*(origName, body: untyped): untyped =
                 raise (ref FungusConvDefect)(msg: "Cannot convert '$#' to '$#'." % [$val.kind, $enumName])
               typ val
 
+            proc init*(_: typedesc[typ]): typ = typ name(kind: enumName)
+
+
         for field in commonFields:
           addons.add:
             genAst(

@@ -12,18 +12,24 @@ adtEnum(Command):
   BoolCmd: bool
   IntCmd: int
 
+type Commands = StrCmd or FloatCmd or BoolCmd or IntCmd
 
-proc init*(_: typedesc[StrCmd], short, long, help: string, required: bool): StrCmd =
-  result = StrCmd.init("")
+
+proc init*(T: typedesc[Commands], short, long, help: string, required: bool): T=
+  result = T.init()
   result.short = short
   result.long = long
   result.help = help
   result.required = required
 
 proc `==`(a, b: StrCmd): bool = adtEqual(a, b)
+proc `==`(a, b: FloatCmd): bool = adtEqual(a, b)
+proc `==`(a, b: BoolCmd): bool = adtEqual(a, b)
+proc `==`(a, b: IntCmd): bool = adtEqual(a, b)
 
 var a = Command StrCmd.init("h", "looong", "this does helpy things", true)
 check StrCmd(a) == StrCmd.init("h", "looong", "this does helpy things", true)
 check StrCmd(a) != StrCmd.init("h", "looong", "", true)
+check IntCmd.init("hmm", "huh", "bleh", false) == IntCmd.init("hmm", "huh", "bleh", false)
 discard $StrCmd(a)
 
