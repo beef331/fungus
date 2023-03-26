@@ -25,20 +25,50 @@ macro adtChildStrImpl(val: typed, base: typedesc): untyped =
     typ = val.getTypeInst()
     baseTyp = base.getTypeImpl[^1]
     table = adtTable[baseTyp.hashName]
-
+    res = ident"result"
   for i, x in table[2]:
     if x.eqIdent(typ):
-      if table[3][i].kind == nnkEmpty:
-        result = newLit(typ.repr & "()")
-      else:
-        result = genast(typ, val, baseTyp, res = ident"result", fieldName = table[3][i]):
-          res = astToStr(typ)
+      result = genast(typ, res):
+        res = astToStr(typ)
+        res.add "("
 
-          when typeof(val.baseTyp.fieldName) isnot tuple:
-            res.add "("
-          res.add $val.baseTyp.fieldName
-          when typeof(val.baseTyp.fieldName) isnot tuple:
-            res.add ")"
+      for field in table[^1]:
+        result.add:
+          genast(typ, val, baseTyp, res, field):
+            res.add astToStr(field)
+            res.add": "
+            when typeof(val.field) is string:
+              res.add '"'
+            res.add $val.field
+            when typeof(val.field) is string:
+              res.add '"'
+            res.add ", "
+
+      if table[3][i].kind != nnkEmpty:
+        result.add:
+          genast(typ, val, baseTyp, res, fieldName = table[3][i]):
+            when baseTyp(val).fieldName is tuple:
+              for name, field in baseTyp(val).fieldName.fieldPairs:
+                res.add name
+                res.add ": "
+                when field is string:
+                  res.add '"'
+                res.add $field
+                when field is string:
+                  res.add '"'
+                res.add ", "
+              if res.endsWith(", "):
+                res.setLen(res.len - 1)
+              res[^1] = ')'
+            else:
+              res.add "internalValue"
+              res.add ": "
+              when val.baseTyp.fieldName is string:
+                  res.add '"'
+              res.add $val.baseTyp.fieldName
+              when val.baseTyp.fieldName is string:
+                  res.add '"'
+              res.add ")"
 
 macro adtEqImpl(a, b: typed): untyped =
   let

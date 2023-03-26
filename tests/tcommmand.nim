@@ -20,6 +20,6 @@ proc init*(_: typedesc[StrCmd], short, long, help: string, required: bool): StrC
   result.help = help
   result.required = required
 
-var a = Command StrCmd.init("", "h", "this does helpy things", true)
-echo a
+var a = Command StrCmd.init("h", "looong", "this does helpy things", true)
+echo $a.StrCmd
 
