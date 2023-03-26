@@ -75,11 +75,10 @@ proc adtEqual*[T: AdtChild](a, b: T): bool =
 
 type FungusConvDefect = object of Defect
 
-macro subscribeAdt(name: typed, enumFields, typeNames, dataNames: untyped) =
-  adtTable[name.hashName] = newStmtList(name, enumFields, typenames, dataNames)
+macro subscribeAdt(name: typed, enumFields, typeNames, dataNames, fieldNames: untyped) =
+  adtTable[name.hashName] = newStmtList(name, enumFields, typenames, dataNames, fieldNames)
 
 macro adtEnum*(origName, body: untyped): untyped =
-  var typeNames, enumFields, addons, dataNames: seq[NimNode]
   let
     name =
       if origName.kind == nnkBracketExpr:
@@ -104,8 +103,9 @@ macro adtEnum*(origName, body: untyped): untyped =
         expr
       else:
         origName
+  var typeNames, enumFields, addons, dataNames, commonFields, commonFieldNames: seq[NimNode]
 
-  for entry in body:
+  for i, entry in body:
     case entry.kind
     of nnkIdent:
       typeNames.add entry
@@ -140,85 +140,110 @@ macro adtEnum*(origName, body: untyped): untyped =
           proc init*(_: typedesc[typ]): typ = typ name(kind: enumName)
 
     of nnkCall, nnkCommand:
-      if entry.len != 2:
-        error("Invalid entry expected `name: type`", entry)
-      typeNames.add entry[0]
-      let
-        enumName = ident($entry[0] & "Kind")
-        dataName = ident(entry[0].repr & "Data")
-        typ =
-          if origName.kind == nnkBracketExpr:
-            let theExpr = copyNimTree(instantiatedType)
-            theExpr[0] = entry[0]
-            theExpr
-          else:
-            entry[0]
+      if entry[0].eqIdent"common":
+        if i > 0:
+          error("`common` block has to come before other fields.", entry)
+        for x in entry[1]:
+          if x.len != 2:
+            error("Expected 'name: field'.", x)
+          if x[0].eqIdent"kind":
+            error("Cannot name a field 'kind', that is the name of the descriminate.", x[0])
+          commonFieldNames.add x[0]
+          commonFields.add NimNode identDef(NimName x[0], x[1])
 
-      dataNames.add dataName
-
-      enumFields.add NimNode enumField(enumName)
-      caseDef.add ofBranch(enumName, NimNode identDef(NimName dataName, typ = entry[1]))
-      addons.add:
-        genAst(
-          name,
-          enumName,
-          dataName,
-          typ,
-          tupl = entry[1],
-          procName = ident("to" & $entry[0]),
-          res = ident"result",
-          instTyp = instantiatedType
-        ):
-          converter `to name`*(arg: typ): instTyp = instTyp(arg)
-          converter `to name`*(arg: var typ): var instTyp = instTyp(arg)
-
-          proc to*(val: instTyp, _: typedesc[typ]): lent typ =
-            if val.kind != enumName:
-              raise (ref FungusConvDefect)(msg: "Cannot convert '$#' to '$#'." % [$val.kind, $enumName])
-            typ instTyp(val)
-
-          proc to*(val: var instTyp, _: typedesc[typ]): var typ =
-            if val.kind != enumName:
-              raise (ref FungusConvDefect)(msg: "Cannot convert '$#' to '$#'." % [$val.kind, $enumName])
-            typ instTyp(val)
-
-
-      let
-        initProc = routineNode(NimName postfix(ident "init", "*"))
-        tupleConstr = nnkTupleConstr.newTree()
-      initProc.addParam identDef(NimName ident"_", makeTypeDesc typ)
-      initProc.returnType = typ
-      if entry[1][0].kind == nnkTupleTy:
-        # Tuples emit field accessors
-        for iDef in entry[1][0]:
-          let fieldTyp = iDef[^2]
-          for field in iDef[0..^3]:
-            addons.add:
-              genast(field, typ, fieldTyp, name, dataName, instTyp = instantiatedType):
-                proc field*(val: typ): lent fieldTyp = instTyp(val).dataName.field
-                proc field*(val: var typ): var fieldTyp = instTyp(val).dataName.field
-                proc `field=`*(val: var typ, newVal: fieldTyp) = instTyp(val).dataName.field = newVal
-
-        for val in entry[1][0]:
-          for name in val[0..^3]:
-            initProc.addParam identDef(NimName name, val[^2])
-            tupleConstr.add name
-
-        initProc.addToBody:
-          genast(enumName, dataName, tupleConstr, typ, instTyp = instantiatedType):
-            typ instTyp(kind: enumName, dataName: tupleConstr)
       else:
-        # Handle the case of `Arr: array[3, int]`s special code
-        initProc.addParam(identDef(NimName ident"param", entry[1]))
-        initProc.addToBody:
-          genast(enumName, dataName, tupleConstr, typ, instTyp = instantiatedType, paramName = ident"param"):
-            typ instTyp(kind: enumName, dataName: paramName)
-        addons.add:
-          genast(typ, dataName, realTyp = entry[1], instTyp = instantiatedType):
-            converter `toInternal`*(val: typ): realTyp = instTyp(val).dataName
-            converter `toInternal`*(val: var typ): var realTyp = instTyp(val).dataName
+        if entry.len != 2:
+          error("Invalid entry expected `name: type`", entry)
+        typeNames.add entry[0]
+        let
+          enumName = ident($entry[0] & "Kind")
+          dataName = ident(entry[0].repr & "Data")
+          typ =
+            if origName.kind == nnkBracketExpr:
+              let theExpr = copyNimTree(instantiatedType)
+              theExpr[0] = entry[0]
+              theExpr
+            else:
+              entry[0]
 
-      addons[^1].add NimNode initProc
+        dataNames.add dataName
+
+        enumFields.add NimNode enumField(enumName)
+        caseDef.add ofBranch(enumName, NimNode identDef(NimName dataName, typ = entry[1]))
+        addons.add:
+          genAst(
+            name,
+            enumName,
+            dataName,
+            typ,
+            tupl = entry[1],
+            instTyp = instantiatedType
+          ):
+            converter `to name`*(arg: typ): instTyp = instTyp(arg)
+            converter `to name`*(arg: var typ): var instTyp = instTyp(arg)
+
+            proc to*(val: instTyp, _: typedesc[typ]): lent typ =
+              if val.kind != enumName:
+                raise (ref FungusConvDefect)(msg: "Cannot convert '$#' to '$#'." % [$val.kind, $enumName])
+              typ val
+
+            proc to*(val: var instTyp, _: typedesc[typ]): var typ =
+              if val.kind != enumName:
+                raise (ref FungusConvDefect)(msg: "Cannot convert '$#' to '$#'." % [$val.kind, $enumName])
+              typ val
+
+        for field in commonFields:
+          addons.add:
+            genAst(
+              name,
+              enumName,
+              dataName,
+              typ,
+              tupl = entry[1],
+              fieldName = field[0],
+              fieldType = field[^2],
+              instTyp = instantiatedType
+            ):
+              proc fieldName*(val: typ): lent fieldType = instTyp(val).fieldName
+              proc fieldName*(val: var typ): var fieldType = instTyp(val).fieldName
+              proc `fieldName=`*(val: var typ, newVal: fieldType) = instTyp(val).fieldName = newVal
+
+        let
+          initProc = routineNode(NimName postfix(ident "init", "*"))
+          tupleConstr = nnkTupleConstr.newTree()
+        initProc.addParam identDef(NimName ident"_", makeTypeDesc typ)
+        initProc.returnType = typ
+        if entry[1][0].kind == nnkTupleTy:
+          # Tuples emit field accessors
+          for iDef in entry[1][0]:
+            let fieldTyp = iDef[^2]
+            for field in iDef[0..^3]:
+              addons.add:
+                genast(field, typ, fieldTyp, name, dataName, instTyp = instantiatedType):
+                  proc field*(val: typ): lent fieldTyp = instTyp(val).dataName.field
+                  proc field*(val: var typ): var fieldTyp = instTyp(val).dataName.field
+                  proc `field=`*(val: var typ, newVal: fieldTyp) = instTyp(val).dataName.field = newVal
+
+          for val in entry[1][0]:
+            for name in val[0..^3]:
+              initProc.addParam identDef(NimName name, val[^2])
+              tupleConstr.add name
+
+          initProc.addToBody:
+            genast(enumName, dataName, tupleConstr, typ, instTyp = instantiatedType):
+              typ instTyp(kind: enumName, dataName: tupleConstr)
+        else:
+          # Handle the case of `Arr: array[3, int]`s special code
+          initProc.addParam(identDef(NimName ident"param", entry[1]))
+          initProc.addToBody:
+            genast(enumName, dataName, tupleConstr, typ, instTyp = instantiatedType, paramName = ident"param"):
+              typ instTyp(kind: enumName, dataName: paramName)
+          addons.add:
+            genast(typ, dataName, realTyp = entry[1], instTyp = instantiatedType):
+              converter `toInternal`*(val: typ): realTyp = instTyp(val).dataName
+              converter `toInternal`*(val: var typ): var realTyp = instTyp(val).dataName
+
+        addons[^1].add NimNode initProc
     else:
       error("Invalid entry, expected either an 'name' or 'name: tuple[...]'.", entry)
 
@@ -229,7 +254,7 @@ macro adtEnum*(origName, body: untyped): untyped =
     objDef = objectDef(NimName postFix(name, "*"))
     recCase = nnkRecCase.newTree()
   NimNode(caseDef).copyChildrenTo(recCase)
-  objDef.recList = nnkRecList.newTree recCase
+  objDef.recList = nnkRecList.newTree commonFields & @[recCase]
 
   if origName.kind == nnkBracketExpr:
     # We need to add generic parameters
@@ -261,7 +286,8 @@ macro adtEnum*(origName, body: untyped): untyped =
   result.add newCall(bindSym"subscribeAdt", name,
     nnkBracket.newTree(enumFields),
     nnkBracket.newTree(typeNames),
-    nnkBracket.newTree(dataNames)
+    nnkBracket.newTree(dataNames),
+    nnkBracket.newTree(commonFieldNames)
   )
 
 proc getKindAndDataName(data, toLookFor: NimNode): (NimNode, NimNode) =
