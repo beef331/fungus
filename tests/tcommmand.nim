@@ -1,5 +1,5 @@
 import fungus
-import std/macros
+import std/unittest
 
 adtEnum(Command):
   common:
@@ -20,6 +20,10 @@ proc init*(_: typedesc[StrCmd], short, long, help: string, required: bool): StrC
   result.help = help
   result.required = required
 
+proc `==`(a, b: StrCmd): bool = adtEqual(a, b)
+
 var a = Command StrCmd.init("h", "looong", "this does helpy things", true)
-echo $a.StrCmd
+check StrCmd(a) == StrCmd.init("h", "looong", "this does helpy things", true)
+check StrCmd(a) != StrCmd.init("h", "looong", "", true)
+discard $StrCmd(a)
 

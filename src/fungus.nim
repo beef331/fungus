@@ -79,15 +79,24 @@ macro adtEqImpl(a, b: typed): untyped =
     genast(a, b):
       if a.kind != b.kind:
         return false
-  let caseStmt = caseStmt(NimName nnkDotExpr.newTree(a, ident"kind"))
+  let
+    caseStmt = caseStmt(NimName nnkDotExpr.newTree(a, ident"kind"))
+    commonCompare = block:
+      var compare = newLit(true)
+      for field in table[^1]:
+        compare = infix(compare, "and"):
+          genast(a, b, field):
+            a.field == b.field
+      compare
+
   for i, x in table[1]:
     if table[3][i].kind == nnkEmpty:
-      caseStmt.add ofBranch(x, newLit(true))
+      caseStmt.add ofBranch(x, commonCompare)
     else:
       caseStmt.add:
         ofBranch(x):
-          genast(a, b, fieldName = table[3][i]):
-            a.fieldName == b.fieldName
+          genast(a, b, fieldName = table[3][i], commonCompare):
+            a.fieldName == b.fieldName and commonCompare
   result.add NimNode caseStmt
 
 proc `$`*[T: AdtChild](adtChild: T): string =
