@@ -81,6 +81,7 @@ macro subscribeAdt(name: typed, enumFields, typeNames, dataNames: untyped) =
 macro adtEnum*(origName, body: untyped): untyped =
   var typeNames, enumFields, addons, dataNames: seq[NimNode]
   let
+    origNameInfo = origName.lineInfoObj
     name =
       if origName.kind == nnkBracketExpr:
         origName[0]
@@ -193,11 +194,17 @@ macro adtEnum*(origName, body: untyped): untyped =
         for iDef in entry[1][0]:
           let fieldTyp = iDef[^2]
           for field in iDef[0..^3]:
-            addons.add:
-              genast(field, typ, fieldTyp, name, dataName, instTyp = instantiatedType):
-                proc field*(val: typ): lent fieldTyp = instTyp(val).dataName.field
-                proc field*(val: var typ): var fieldTyp = instTyp(val).dataName.field
-                proc `field=`*(val: var typ, newVal: fieldTyp) = instTyp(val).dataName.field = newVal
+
+            let
+              fieldLineInfo = field.lineInfoObj()
+              fieldAccess =
+                genast(field, typ, fieldTyp, name, dataName, instTyp = instantiatedType):
+                  proc field*(val: typ): lent fieldTyp = instTyp(val).dataName.field
+                  proc field*(val: var typ): var fieldTyp = instTyp(val).dataName.field
+                  proc `field=`*(val: var typ, newVal: fieldTyp) = instTyp(val).dataName.field = newVal
+            for n in fieldAccess:
+              n[0][1].setLineInfo(fieldLineInfo)
+            addons.add fieldAccess
 
         for val in entry[1][0]:
           for name in val[0..^3]:
@@ -224,12 +231,12 @@ macro adtEnum*(origName, body: untyped): untyped =
 
   let enumName = ident $name & "Kind"
   result = newStmtList(NimNode enumDef(NimName enumName, enumFields, true))
-  NimNode(caseDef)[0] = NimNode identDef(NimName NimNode(caseDef)[0], NimNode enumName)
+  NimNode(caseDef)[0] = NimNode identDef(NimName NimNode(caseDef)[0], enumName)
   let
     objDef = objectDef(NimName postFix(name, "*"))
     recCase = nnkRecCase.newTree()
-  echo objDef.NimNode[0][1].treeRepr
-  objDef.NimNode[0][1].copyLineInfo(name)
+
+  objDef.NimNode[0][1].setLineInfo(origNameInfo)
   NimNode(caseDef).copyChildrenTo(recCase)
   objDef.recList = nnkRecList.newTree recCase
 
@@ -247,11 +254,14 @@ macro adtEnum*(origName, body: untyped): untyped =
   result[0].add NimNode objDef
 
   for i, typeName in typeNames:
-    let def =
-      genast(instantiatedType, typeName, field = enumFields[i]):
-        type typeName* = distinct instantiatedType
 
-    def[0][0][1].copyLineInfo(typeName)
+    let
+      lineInfoName = copyNimNode(typeName)
+      def =
+        genast(instantiatedType, typeName, field = enumFields[i]):
+          type typeName* = distinct instantiatedType
+
+    def[0][0][1].copyLineInfo(lineInfoName)
     def[0][1] = objDef.genericParamList()
     result[0].add def[0]
 
@@ -408,15 +418,22 @@ macro kindOf(name: untyped, typ: typed): untyped =
       name
 
 macro `from`*(matcher, val: untyped): untyped =
-  let (name, T, isVar) = getDeclInfo(matcher)
+  let
+    (name, T, isVar) = getDeclInfo(matcher)
+    nameInfo = name.lineInfoObj
   if isVar:
     result =
       genast(name, T, val, typKind = ident($T & "Kind")):
         val.kind == typKind and
-        (var name {.byaddr.} = kindOf(T, val)(val); true)
+        (
+          var tmp = kindOf(T, val)(val).addr
+          template name: untyped = tmp[]
+          true
+        )
+    result[^1][1][0].setLineInfo(nameInfo) # This is really dumb
   else:
     result =
       genast(name, T, val, typKind = ident($T & "Kind")):
         val.kind == typKind and
         (let name = kindOf(T, val)(val); true)
-
+    result[^1][0][0][0].setLineInfo(nameInfo) # This is dumb

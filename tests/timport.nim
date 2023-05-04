@@ -14,3 +14,5 @@ else:
 
 if (myVal: Circle) from a:
   discard
+elif (var myVal: Line) from a:
+  discard
