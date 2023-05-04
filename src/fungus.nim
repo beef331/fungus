@@ -228,6 +228,8 @@ macro adtEnum*(origName, body: untyped): untyped =
   let
     objDef = objectDef(NimName postFix(name, "*"))
     recCase = nnkRecCase.newTree()
+  echo objDef.NimNode[0][1].treeRepr
+  objDef.NimNode[0][1].copyLineInfo(name)
   NimNode(caseDef).copyChildrenTo(recCase)
   objDef.recList = nnkRecList.newTree recCase
 
@@ -248,6 +250,8 @@ macro adtEnum*(origName, body: untyped): untyped =
     let def =
       genast(instantiatedType, typeName, field = enumFields[i]):
         type typeName* = distinct instantiatedType
+
+    def[0][0][1].copyLineInfo(typeName)
     def[0][1] = objDef.genericParamList()
     result[0].add def[0]
 
