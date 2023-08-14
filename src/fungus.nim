@@ -80,10 +80,13 @@ macro subscribeAdt(name: typed, enumFields, typeNames, dataNames: untyped) =
 
 macro adtEnum*(origName, body: untyped): untyped =
   var typeNames, enumFields, addons, dataNames: seq[NimNode]
+  var isRef = origName.kind == nnkRefTy
   let
     origNameInfo = origName.lineInfoObj
     name =
       if origName.kind == nnkBracketExpr:
+        origName[0]
+      elif origName.kind == nnkRefTy:
         origName[0]
       else:
         origName
@@ -233,7 +236,7 @@ macro adtEnum*(origName, body: untyped): untyped =
   result = newStmtList(NimNode enumDef(NimName enumName, enumFields, true))
   NimNode(caseDef)[0] = NimNode identDef(NimName NimNode(caseDef)[0], enumName)
   let
-    objDef = objectDef(NimName postFix(name, "*"))
+    objDef = objectDef(NimName postFix(name, "*"), isRef = isRef)
     recCase = nnkRecCase.newTree()
 
   objDef.NimNode[0][1].setLineInfo(origNameInfo)

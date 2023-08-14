@@ -29,7 +29,7 @@ Other languages get around it doing something similar to what this library does,
 What one writes with fungus instead is:
 ```nim
 import fungus
-adtEnum(Shape):
+adtEnum(Shape): # or adtEnum(ref Shape) generate ref object type
   None
   Circle: tuple[x, y, r: int]
   Rectangle: tuple[x, y, w, h: int]
