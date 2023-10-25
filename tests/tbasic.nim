@@ -1,9 +1,14 @@
 import fungus
-adtEnum(Shape):
-  None
-  Circle: tuple[x, y, r: int]
-  Rectangle: tuple[x, y, w, h: int]
-  Line: tuple[x1, y1, x2, y2: int]
+
+type Shape* {.variant.} = object
+  case _: ShapeKind
+  of None: discard
+  of Circle:
+    x, y, r: int
+  of Rectangle:
+    x, y, w, h: int
+  of Line:
+    x1, y1, x2, y2: int
 
 var a = Shape Circle.init(10, 10, 100)
 a.to(Circle).r = 300

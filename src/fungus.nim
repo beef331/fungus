@@ -5,13 +5,17 @@ import pkg/micros
 const adtTable = CacheTable"FungusTable"
 
 proc hashName(n: NimNode): string =
-  if n.kind == nnkBracketExpr:
-    n[0].signatureHash
-  else:
-    n.signatureHash
+  let typ = n.getTypeInst
+  result = 
+    if typ.kind == nnkSym:
+      typ.signatureHash
+    else:
+      typ[1].signatureHash
 
-macro isAdt(t: typed): untyped =
-  newLit(t.getTypeInst.hashName() in adtTable)
+macro isAdt*(t: typed): untyped =
+  for x, y in adtTable:
+    echo x, " ", y.treeRepr
+  newLit(t.hashName in adtTable)
 
 type
   ADTBase* = concept t
@@ -78,58 +82,71 @@ type FungusConvDefect = object of Defect
 macro subscribeAdt(name: typed, enumFields, typeNames, dataNames: untyped) =
   adtTable[name.hashName] = newStmtList(name, enumFields, typenames, dataNames)
 
-macro adtEnum*(origName, body: untyped): untyped =
+macro variant*(tree: untyped): untyped =
+  let origName = tree[0][0].baseName
   var typeNames, enumFields, addons, dataNames: seq[NimNode]
   let
     origNameInfo = origName.lineInfoObj
-    name =
-      if origName.kind == nnkBracketExpr:
-        origName[0]
-      else:
-        origName
-
-    caseDef = caseStmt(NimName postfix(ident"kind", "*"))
-    genericParams =
-      if origName.kind == nnkBracketExpr:
-        origName[1..^1]
-      else:
-        @[newEmptyNode()]
+    name = origName
+    caseDef = caseStmt(NimName ident"kind")
+    genericParams = tree[1]
+    internalName = genSym(nskType, $name)
     instantiatedType =
-      if origName.kind == nnkBracketExpr:
-        let expr = nnkBracketExpr.newTree(origName[0])
+      if genericParams.len > 0:
+        let expr = nnkBracketExpr.newTree(internalName)
         for param in genericParams:
-          if param.kind == nnkIdent:
-            expr.add param
+          if param.kind == nnkIdentDefs:
+            for name in identDef(param).names:
+              expr.add name
           elif param.kind == nnkExprColonExpr:
-            expr.add param[0]
+            expr.add name[0]
         expr
       else:
-        origName
+        internalName
 
-  for entry in body:
-    case entry.kind
-    of nnkIdent:
-      typeNames.add entry
+
+  var body = 
+    if tree[0][^1].kind == nnkRefTy:
+      tree[^1][^1]
+    else:
+      tree[^1][^1]
+  
+  if body[0].kind != nnkRecCase:
+    error("Expected `case _: EnumName`", body[0])
+
+  body = body[0]
+
+  for entry in body[1..^1]:
+    typeNames.add entry[0]
+    let enumName = ident($entry[0] & "Kind")
+    enumFields.add NimNode enumField(enumName)
+    var tup = nnkTupleTy.newTree()
+    for field in entry[1..^1]:
+      case field.kind
+      of nnkDiscardStmt, nnkNilLit:
+        discard
+      of nnkRecList:
+        for x in field:
+          tup.add x
+      else:
+        error("Unexpected AST", field)
+    let
+      typ =
+        if genericParams.len > 0:
+          let theExpr = copyNimTree(instantiatedType)
+          theExpr[0] = entry[0]
+          theExpr
+        else:
+          entry[0]
+    if tup.len == 0:
       dataNames.add newEmptyNode()
-      let enumName = ident($entry & "Kind")
-      enumFields.add NimNode enumField(enumName)
       caseDef.add ofBranch(enumName, newNilLit())
-
-      let
-        typ =
-          if origName.kind == nnkBracketExpr:
-            let theExpr = copyNimTree(instantiatedType)
-            theExpr[0] = entry
-            theExpr
-          else:
-            entry
-
       addons.add:
         genAst(
           name = instantiatedType,
           enumName,
           typ,
-          procName = ident("to" & $entry),
+          procName = ident("to" & $entry[0]),
           res = ident"result"
         ):
 
@@ -139,26 +156,10 @@ macro adtEnum*(origName, body: untyped): untyped =
             typ name(val)
 
           proc init*(_: typedesc[typ]): typ = typ name(kind: enumName)
-
-    of nnkCall, nnkCommand:
-      if entry.len != 2:
-        error("Invalid entry expected `name: type`", entry)
-      typeNames.add entry[0]
-      let
-        enumName = ident($entry[0] & "Kind")
-        dataName = ident(entry[0].repr & "Data")
-        typ =
-          if origName.kind == nnkBracketExpr:
-            let theExpr = copyNimTree(instantiatedType)
-            theExpr[0] = entry[0]
-            theExpr
-          else:
-            entry[0]
-
+    else:
+      let dataName = ident($entry[0] & "Data")
       dataNames.add dataName
-
-      enumFields.add NimNode enumField(enumName)
-      caseDef.add ofBranch(enumName, NimNode identDef(NimName dataName, typ = entry[1]))
+      caseDef.add ofBranch(enumName, NimNode identDef(NimName dataName, typ = tup))
       addons.add:
         genAst(
           name,
@@ -182,16 +183,14 @@ macro adtEnum*(origName, body: untyped): untyped =
             if val.kind != enumName:
               raise (ref FungusConvDefect)(msg: "Cannot convert '$#' to '$#'." % [$val.kind, $enumName])
             typ instTyp(val)
-
-
       let
-        initProc = routineNode(NimName postfix(ident "init", "*"))
+        initProc = routineNode(NimName ident "init")
         tupleConstr = nnkTupleConstr.newTree()
       initProc.addParam identDef(NimName ident"_", makeTypeDesc typ)
       initProc.returnType = typ
-      if entry[1][0].kind == nnkTupleTy:
+      if tup.len > 0:
         # Tuples emit field accessors
-        for iDef in entry[1][0]:
+        for iDef in tup:
           let fieldTyp = iDef[^2]
           for field in iDef[0..^3]:
 
@@ -206,7 +205,7 @@ macro adtEnum*(origName, body: untyped): untyped =
               n[0][1].setLineInfo(fieldLineInfo)
             addons.add fieldAccess
 
-        for val in entry[1][0]:
+        for val in tup:
           for name in val[0..^3]:
             initProc.addParam identDef(NimName name, val[^2])
             tupleConstr.add name
@@ -226,30 +225,27 @@ macro adtEnum*(origName, body: untyped): untyped =
             converter `toInternal`*(val: var typ): var realTyp = instTyp(val).dataName
 
       addons[^1].add NimNode initProc
-    else:
-      error("Invalid entry, expected either an 'name' or 'name: tuple[...]'.", entry)
 
   let enumName = ident $name & "Kind"
-  result = newStmtList(NimNode enumDef(NimName enumName, enumFields, true))
+  result = newStmtList(NimNode enumDef(NimName enumName, enumFields, false))
   NimNode(caseDef)[0] = NimNode identDef(NimName NimNode(caseDef)[0], enumName)
   let
-    objDef = objectDef(NimName postFix(name, "*"))
+    objDef = objectDef(NimName internalName)
     recCase = nnkRecCase.newTree()
 
-  objDef.NimNode[0][1].setLineInfo(origNameInfo)
+  objDef.NimNode[0].setLineInfo(origNameInfo)
   NimNode(caseDef).copyChildrenTo(recCase)
   objDef.recList = nnkRecList.newTree recCase
 
-  if origName.kind == nnkBracketExpr:
-    # We need to add generic parameters
-    for param in origName[1..^1]:
-      case param.kind
-      of nnkExprColonExpr:
-        objDef.addGeneric identDef(NimName param[0], param[1])
-      of nnkIdent:
-        objDef.addGeneric identDef(NimName param, ident"auto") # have to use `auto` here otherwise compiler errors
-      else:
-        error("Unexpected generic constraint", param)
+  # We need to add generic parameters
+  for param in genericParams:
+    case param.kind
+    of nnkExprColonExpr:
+      objDef.addGeneric identDef(NimName param[0], param[1])
+    of nnkIdentDefs:
+      objDef.addGeneric identDef(param) # have to use `auto` here otherwise compiler errors
+    else:
+      error("Unexpected generic constraint", param)
 
   result[0].add NimNode objDef
 
@@ -261,7 +257,7 @@ macro adtEnum*(origName, body: untyped): untyped =
         genast(instantiatedType, typeName, field = enumFields[i]):
           type typeName* = distinct instantiatedType
 
-    def[0][0][1].copyLineInfo(lineInfoName)
+    def[0].copyLineInfo(lineInfoName)
     def[0][1] = objDef.genericParamList()
     result[0].add def[0]
 
@@ -277,6 +273,12 @@ macro adtEnum*(origName, body: untyped): untyped =
     nnkBracket.newTree(typeNames),
     nnkBracket.newTree(dataNames)
   )
+  result.add instantiatedType
+  let temp = result
+  result = copyNimTree(tree) 
+  result[^1] = temp
+
+  echo result.repr
 
 proc getKindAndDataName(data, toLookFor: NimNode): (NimNode, NimNode) =
   for i, name in data[2]:
@@ -285,7 +287,7 @@ proc getKindAndDataName(data, toLookFor: NimNode): (NimNode, NimNode) =
   error(fmt"Invalid kind '{toLookFor.repr}'." , toLookFor)
 
 
-macro match*(val: ADTBase, branches: varargs[untyped]): untyped =
+macro match*(val: typed, branches: varargs[untyped]): untyped =
   result = nnkIfStmt.newTree()
   let
     adtData = adtTable[val.getTypeInst.hashName]
