@@ -297,89 +297,89 @@ macro match*(val: ADTBase, branches: varargs[untyped]): untyped =
     if branch.kind in {nnkElse, nnkElifBranch}:
       result.add branch
     else:
-      case branch[0].kind
-      of nnkInfix: # We're doing a named match
-        if branch[0][0].kind != nnkIdent or not branch[0][0].eqIdent"as":
-          error("Invaid operation expected 'as'.", branch[0][0])
+      let body = branch[^1]
+      for branch in branch[0..^2]:
+        let injection = body.copyNimTree()
+        case branch.kind
+        of nnkInfix: # We're doing a named match
+          if branch[0].kind != nnkIdent or not branch[0].eqIdent"as":
+            error("Invaid operation expected 'as'.", branch[0])
 
-        let (kind, dataName) = getKindAndDataName(adtData, branch[0][1])
-        case branch[0][^1].kind
-        of nnkIdent: # emit a `let`
-          let injection = branch[^1].copyNimTree
-          injection.insert 0, newLetStmt(branch[0][^1], newCall("to", val, branch[0][1]))
-          result.add nnkElifBranch.newTree(
-            infix(nnkDotExpr.newTree(val, ident"kind"), "==", kind),
-            injection)
+          let (kind, dataName) = getKindAndDataName(adtData, branch[1])
+          case branch[^1].kind
+          of nnkIdent: # emit a `let`
+            injection.insert 0, newLetStmt(branch[^1], newCall("to", val, branch[1]))
+            result.add nnkElifBranch.newTree(
+              infix(nnkDotExpr.newTree(val, ident"kind"), "==", kind),
+              injection)
 
-        of nnkCall, nnkCommand: # Check if it's 'mut', and `val` is mut, emit a template
-          if not branch[0][^1][0].eqIdent"mut":
-            error("Can only make a 'mut' call.", branch[0][^1][0])
+          of nnkCall, nnkCommand: # Check if it's 'mut', and `val` is mut, emit a template
+            if not branch[^1][0].eqIdent"mut":
+              error("Can only make a 'mut' call.", branch[^1][0])
 
-          if valIsNotMut:
-            error("Can only make a 'mut' reference to a mutable variable.", val)
+            if valIsNotMut:
+              error("Can only make a 'mut' reference to a mutable variable.", val)
 
-          let
-            name = branch[0][^1][1]
-            injection = branch[^1].copyNimTree
-            nameInfo = name.lineInfoObj
-          injection.insert 0:
-            genAst(val, byaddr = bindSym"byaddr", name, destType = branch[0][1]):
-              var tmp = to(val, destType).addr
-              template name: untyped = tmp[]
-          injection[0][^1][0].setLineInfo(nameInfo)
+            let
+              name = branch[^1][1]
+              nameInfo = name.lineInfoObj
+            injection.insert 0:
+              genAst(val, byaddr = bindSym"byaddr", name, destType = branch[1]):
+                var tmp = to(val, destType).addr
+                template name: untyped = tmp[]
+            injection[0][^1][0].setLineInfo(nameInfo)
 
-          result.add nnkElifBranch.newTree(
-            infix(nnkDotExpr.newTree(val, ident"kind"), "==", kind),
-            injection)
-
-
-        of nnkTupleConstr: # same as a call check if each a param is a `mut`, if soe emit a template per param
-          let injection = branch[^1].copyNimTree
-          for i, x in branch[0][^1]:
-            case x.kind
-            of nnkCall, nnkCommand:
-              if not x[0].eqIdent"mut":
-                error("Invalid call inside match.", x)
-
-              if valIsNotMut:
-                error("Can only make a 'mut' reference to a mutable variable.", val)
-              let nameInfo = x[1].lineInfoObj
-              injection.insert 0:
-                genast(val, dataName, name = x[1], index = newLit(i), destType = branch[0][1], expr = branch[0].repr):
-                  when val.dataName isnot tuple:
-                    {.error: "attempted to unpack a type that is not a tuple: '" & expr & "'.".}
-                  var tmp = val.dataName[index].addr
-                  template name: untyped = tmp[]
-              injection[0][^1][0].setLineInfo(nameInfo)
+            result.add nnkElifBranch.newTree(
+              infix(nnkDotExpr.newTree(val, ident"kind"), "==", kind),
+              injection)
 
 
-            of nnkIdent:
-              if not x.eqIdent"_":
-                let nameInfo = x.lineInfoObj
+          of nnkTupleConstr: # same as a call check if each a param is a `mut`, if soe emit a template per param
+            for i, x in branch[^1]:
+              case x.kind
+              of nnkCall, nnkCommand:
+                if not x[0].eqIdent"mut":
+                  error("Invalid call inside match.", x)
+
+                if valIsNotMut:
+                  error("Can only make a 'mut' reference to a mutable variable.", val)
+                let nameInfo = x[1].lineInfoObj
                 injection.insert 0:
-                  genast(val, dataName, name = x, index = newLit(i), destType = branch[0][1], expr = branch[0].repr):
+                  genast(val, dataName, name = x[1], index = newLit(i), destType = branch[1], expr = branch[0].repr):
                     when val.dataName isnot tuple:
                       {.error: "attempted to unpack a type that is not a tuple: '" & expr & "'.".}
-                    let name = val.dataName[index]
-                injection[0][^1][0][0].setLineInfo(nameInfo)
+                    var tmp = val.dataName[index].addr
+                    template name: untyped = tmp[]
+                injection[0][^1][0].setLineInfo(nameInfo)
 
-            else:
-              error("Invalid capture statement.", x)
+
+              of nnkIdent:
+                if not x.eqIdent"_":
+                  let nameInfo = x.lineInfoObj
+                  injection.insert 0:
+                    genast(val, dataName, name = x, index = newLit(i), destType = branch[1], expr = branch[0].repr):
+                      when val.dataName isnot tuple:
+                        {.error: "attempted to unpack a type that is not a tuple: '" & expr & "'.".}
+                      let name = val.dataName[index]
+                  injection[0][^1][0][0].setLineInfo(nameInfo)
+
+              else:
+                error("Invalid capture statement.", x)
+            result.add nnkElifBranch.newTree(
+              infix(nnkDotExpr.newTree(val, ident"kind"), "==", kind),
+              injection)
+
+          else:
+            error("Invalid alias statement", branch[^1])
+          implemented.incl branch[1].repr
+
+        of nnkIdent, nnkSym: # Just a kind match
+          let (kind, _)= getKindAndDataName(adtData, branch)
           result.add nnkElifBranch.newTree(
             infix(nnkDotExpr.newTree(val, ident"kind"), "==", kind),
             injection)
-
-        else:
-          error("Invalid alias statement", branch[0][^1])
-        implemented.incl branch[0][1].repr
-
-      of nnkIdent, nnkSym: # Just a kind match
-        let (kind, _)= getKindAndDataName(adtData, branch[0])
-        result.add nnkElifBranch.newTree(
-          infix(nnkDotExpr.newTree(val, ident"kind"), "==", kind),
-          branch[^1])
-        implemented.incl branch[0].repr
-      else: error("Invalid branch not doing a match.", branch)
+          implemented.incl branch.repr
+        else: error("Invalid branch not doing a match.", branch)
 
   if result[^1].kind != nnkElse:
     var unimplemented: HashSet[string]

@@ -5,16 +5,18 @@ adtEnum(Shape):
   Rectangle: tuple[x, y, w, h: int]
   Line: tuple[x1, y1, x2, y2: int]
 
+proc `==`(a, b: Shape): bool = adtEqual(a, b)
+
 var a = Shape Circle.init(10, 10, 100)
 a.to(Circle).r = 300
-echo $a.to(Circle)
+assert a.to(Circle) == Circle.init(10, 10, 300)
 a = Shape Line.init(0, 0, 1, 1)
 
 if (var myVar: Line) from a:
   inc myVar.x1
-  echo myVar
+  assert myVar == Line.init(1, 0, 1, 1)
 elif (myOtherVar: Circle) from a:
-  echo myOtherVar
+  doAssert false
 
 match a:
 of Circle as mut circ:
@@ -24,9 +26,23 @@ of Rectangle as rect:
   echo rect
 of Line as (mut x1, _, x2, _):
   inc x1
-  echo a.to(Line)
+  assert x1 == 2
+  assert a.to(Line) == Line.init(2, 0, 1, 1)
 else: discard
 
 
 if (myVar: Line) from a:
-  echo myVar
+  assert myVar == Line.init(2, 0, 1, 1)
+
+
+proc doThing(shp: Shape): string =
+  match shp:
+  of Circle as c, Rectangle as c:
+    $c.x
+  else:
+    ""
+
+a = Circle.init(10, 20, 30)
+assert doThing(a) == "10"
+a = Rectangle.init(10, 20, 30, 40)
+assert doThing(a) == "10"
