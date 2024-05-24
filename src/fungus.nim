@@ -78,6 +78,11 @@ type FungusConvDefect = object of Defect
 macro subscribeAdt(name: typed, enumFields, typeNames, dataNames: untyped) =
   adtTable[name.hashName] = newStmtList(name, enumFields, typenames, dataNames)
 
+when defined(fungusExportEnumProc):
+  proc adtEnumProc*(origName, body: NimNode): NimNode
+else:
+  proc adtEnumProc(origName, body: NimNode): NimNode
+
 proc adtEnumProc(origName, body: NimNode): NimNode =
   var typeNames, enumFields, addons, dataNames: seq[NimNode]
   let
