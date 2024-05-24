@@ -78,7 +78,12 @@ type FungusConvDefect = object of Defect
 macro subscribeAdt(name: typed, enumFields, typeNames, dataNames: untyped) =
   adtTable[name.hashName] = newStmtList(name, enumFields, typenames, dataNames)
 
-macro adtEnum*(origName, body: untyped): untyped =
+when defined(fungusExportEnumImpl):
+  proc adtEnumImpl*(origName, body: NimNode): NimNode
+else:
+  proc adtEnumImpl(origName, body: NimNode): NimNode
+
+proc adtEnumImpl(origName, body: NimNode): NimNode =
   var typeNames, enumFields, addons, dataNames: seq[NimNode]
   let
     origNameInfo = origName.lineInfoObj
@@ -277,6 +282,8 @@ macro adtEnum*(origName, body: untyped): untyped =
     nnkBracket.newTree(typeNames),
     nnkBracket.newTree(dataNames)
   )
+
+macro adtEnum*(origName, body: untyped): untyped = adtEnumImpl(origName, body)
 
 proc getKindAndDataName(data, toLookFor: NimNode): (NimNode, NimNode) =
   for i, name in data[2]:
