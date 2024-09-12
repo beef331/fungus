@@ -292,11 +292,25 @@ proc getKindAndDataName(data, toLookFor: NimNode): (NimNode, NimNode) =
   error(fmt"Invalid kind '{toLookFor.repr}'." , toLookFor)
 
 
+proc desym(root: NimNode) =
+  for i, x in root:
+    case x.kind
+    of nnkSym:
+      root[i] = ident $x
+    of nnkOpenSymChoice, nnkClosedSymChoice:
+      root[i] = ident $x[0]
+    else:
+      desym(x)
+
+
 macro match*(val: ADTBase, branches: varargs[untyped]): untyped =
   result = nnkIfStmt.newTree()
   let
     adtData = adtTable[val.getTypeInst.hashName]
     valIsNotMut = val.kind != nnkSym or val.symKind != nskVar
+    branches = branches.copyNimTree()
+
+  branches.desym()
 
   var implemented: HashSet[string]
 
