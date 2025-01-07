@@ -313,6 +313,14 @@ macro match*(val: ADTBase, branches: varargs[untyped]): untyped =
 
   var implemented: HashSet[string]
 
+  let
+    origVal = val
+    val =
+      if val.kind in nnkCallKinds:
+        genSym(nskLet)
+      else:
+        val
+
   for branch in branches:
     if branch.kind in {nnkElse, nnkElifBranch}:
       result.add branch
@@ -412,6 +420,10 @@ macro match*(val: ADTBase, branches: varargs[untyped]): untyped =
         unimplemented.incl theRepr
     if unimplemented.len > 0:
       error("Unhandled type branch for: " & $unimplemented)
+
+
+  if origVal.kind in nnkCallKinds:
+    result = newStmtList(newLetStmt(val, origVal), result)
 
 proc getDeclInfo(matcher: NimNode): (NimNode, NimNode, bool) =
   let matcher =
