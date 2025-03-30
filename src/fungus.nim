@@ -213,7 +213,7 @@ proc adtEnumImpl(origName, body: NimNode): NimNode =
 
         for val in entry[1][0]:
           for name in val[0..^3]:
-            initProc.addParam identDef(NimName name, val[^2])
+            initProc.addParam identDef newIdentDefs(name, val[^2], val[^1])
             tupleConstr.add name
 
         initProc.addToBody:

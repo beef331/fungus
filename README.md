@@ -199,3 +199,8 @@ Otherwise it should call this one.
 ```nim
 proc `$`[T](nl: Nil[T]): string = "nil"
 ```
+
+
+## Optional fields
+
+One can use `tuple[x: int = 3]` to indicate an optional field.

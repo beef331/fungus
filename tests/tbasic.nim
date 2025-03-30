@@ -30,3 +30,12 @@ else: discard
 
 if (myVar: Line) from a:
   echo myVar
+
+
+adtEnum(Default):
+  Something: tuple[x: int = 10, y: int]
+  SomethingElse: tuple[x, y: string = "hello"]
+
+assert Something.init(y = 10).adtEqual Something.init(10, 10)
+assert SomethingElse.init().adtEqual SomethingElse.init("hello", "hello")
+
