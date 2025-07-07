@@ -163,7 +163,7 @@ proc adtEnumImpl(origName, body: NimNode): NimNode =
       dataNames.add dataName
 
       enumFields.add NimNode enumField(enumName)
-      caseDef.add ofBranch(enumName, NimNode identDef(NimName dataName, typ = entry[1]))
+      caseDef.add ofBranch(enumName, NimNode identDef(NimName postfix(dataName, "*"), typ = entry[1]))
       addons.add:
         genAst(
           name,
